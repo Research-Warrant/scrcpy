@@ -136,6 +136,14 @@ Here are just some common examples.
     scrcpy -G  # short version
     ```
 
+ - Enable human-readable `INFO-USER-ACTION` logs for outgoing control
+   messages:
+
+    ```bash
+    scrcpy --log-info-user-action
+    SCRCPY_LOG_INFO_USER_ACTION=true scrcpy
+    ```
+
 ## User documentation
 
 The application provides a lot of features and configuration options. They are

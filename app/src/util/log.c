@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <libavutil/log.h>
 
+static bool sc_user_action_logs_enabled;
+
 static SDL_LogPriority
 log_level_sc_to_sdl(enum sc_log_level level) {
     switch (level) {
@@ -52,7 +54,15 @@ sc_set_log_level(enum sc_log_level level) {
     SDL_LogPriority sdl_log = log_level_sc_to_sdl(level);
     SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, sdl_log);
     SDL_LogSetPriority(SDL_LOG_CATEGORY_CUSTOM, sdl_log);
-    SDL_LogSetPriority(SC_LOG_CATEGORY_USER_ACTION, sdl_log);
+    SDL_LogSetPriority(SC_LOG_CATEGORY_USER_ACTION,
+                       sc_user_action_logs_enabled ? sdl_log
+                                                   : SDL_LOG_PRIORITY_WARN);
+}
+
+void
+sc_set_log_user_action_enabled(bool enabled) {
+    sc_user_action_logs_enabled = enabled;
+    sc_set_log_level(sc_get_log_level());
 }
 
 enum sc_log_level

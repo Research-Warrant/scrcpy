@@ -1,6 +1,8 @@
 #include "common.h"
 
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #ifdef HAVE_V4L2
 # include <libavdevice/avdevice.h>
@@ -12,6 +14,7 @@
 #include "options.h"
 #include "scrcpy.h"
 #include "usb/scrcpy_otg.h"
+#include "util/env.h"
 #include "util/log.h"
 #include "util/net.h"
 #include "util/thread.h"
@@ -21,6 +24,24 @@
 #include <windows.h>
 #include "util/str.h"
 #endif
+
+static bool
+parse_env_flag(const char *name) {
+    char *value = sc_get_env(name);
+    if (!value) {
+        return false;
+    }
+
+    bool enabled = !strcmp(value, "1")
+                || !strcmp(value, "true")
+                || !strcmp(value, "TRUE")
+                || !strcmp(value, "yes")
+                || !strcmp(value, "YES")
+                || !strcmp(value, "on")
+                || !strcmp(value, "ON");
+    free(value);
+    return enabled;
+}
 
 static int
 main_scrcpy(int argc, char *argv[]) {
@@ -52,6 +73,11 @@ main_scrcpy(int argc, char *argv[]) {
         goto end;
     }
 
+    bool log_info_user_action = args.opts.log_info_user_action
+        || parse_env_flag("SCRCPY_LOG_INFO_USER_ACTION")
+        || parse_env_flag("LOG_INFO_USER_ACTION")
+        || parse_env_flag("LOG-INFO-USER-ACTION");
+    sc_set_log_user_action_enabled(log_info_user_action);
     sc_set_log_level(args.opts.log_level);
 
     if (args.help) {

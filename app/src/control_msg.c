@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -62,6 +63,114 @@ get_well_known_pointer_id_name(uint64_t pointer_id) {
         default:
             return NULL;
     }
+}
+
+static inline bool
+is_mouse_pointer(uint64_t pointer_id) {
+    return pointer_id == SC_POINTER_ID_MOUSE;
+}
+
+static inline bool
+is_finger_pointer(uint64_t pointer_id) {
+    return pointer_id == SC_POINTER_ID_GENERIC_FINGER
+        || pointer_id == SC_POINTER_ID_VIRTUAL_FINGER;
+}
+
+static const char *
+motionevent_action_label_human(enum android_motionevent_action action) {
+    static const char *const labels[] = {
+        [AMOTION_EVENT_ACTION_DOWN] = "Down",
+        [AMOTION_EVENT_ACTION_UP] = "Up",
+        [AMOTION_EVENT_ACTION_MOVE] = "Move",
+        [AMOTION_EVENT_ACTION_CANCEL] = "Cancel",
+        [AMOTION_EVENT_ACTION_OUTSIDE] = "Outside",
+        [AMOTION_EVENT_ACTION_POINTER_DOWN] = "PointerDown",
+        [AMOTION_EVENT_ACTION_POINTER_UP] = "PointerUp",
+        [AMOTION_EVENT_ACTION_HOVER_MOVE] = "Hover",
+        [AMOTION_EVENT_ACTION_SCROLL] = "Scroll",
+        [AMOTION_EVENT_ACTION_HOVER_ENTER] = "HoverEnter",
+        [AMOTION_EVENT_ACTION_HOVER_EXIT] = "HoverExit",
+        [AMOTION_EVENT_ACTION_BUTTON_PRESS] = "ButtonPress",
+        [AMOTION_EVENT_ACTION_BUTTON_RELEASE] = "ButtonRelease",
+    };
+
+    return ENUM_TO_LABEL(labels, action);
+}
+
+static const char *
+pointer_target_name(uint64_t pointer_id) {
+    switch (pointer_id) {
+        case SC_POINTER_ID_GENERIC_FINGER:
+            return "finger";
+        case SC_POINTER_ID_VIRTUAL_FINGER:
+            return "virtualFinger";
+        case SC_POINTER_ID_MOUSE:
+            return "mouse";
+        default:
+            return "pointer";
+    }
+}
+
+static const char *
+mouse_button_name(enum android_motionevent_buttons button) {
+    switch (button) {
+        case AMOTION_EVENT_BUTTON_PRIMARY:
+            return "left";
+        case AMOTION_EVENT_BUTTON_SECONDARY:
+            return "right";
+        case AMOTION_EVENT_BUTTON_TERTIARY:
+            return "middle";
+        case AMOTION_EVENT_BUTTON_BACK:
+            return "back";
+        case AMOTION_EVENT_BUTTON_FORWARD:
+            return "forward";
+        default:
+            return NULL;
+    }
+}
+
+static const char *
+buttons_to_string(enum android_motionevent_buttons buttons, char buf[32]) {
+    if (!buttons) {
+        return "none";
+    }
+
+    static const struct {
+        enum android_motionevent_buttons button;
+        const char *name;
+    } values[] = {
+        { AMOTION_EVENT_BUTTON_PRIMARY, "left" },
+        { AMOTION_EVENT_BUTTON_SECONDARY, "right" },
+        { AMOTION_EVENT_BUTTON_TERTIARY, "middle" },
+        { AMOTION_EVENT_BUTTON_BACK, "back" },
+        { AMOTION_EVENT_BUTTON_FORWARD, "forward" },
+    };
+
+    enum android_motionevent_buttons known = 0;
+    for (size_t i = 0; i < ARRAY_LEN(values); ++i) {
+        known |= values[i].button;
+    }
+
+    if (buttons & ~known) {
+        snprintf(buf, 32, "0x%08lx", (long) buttons);
+        return buf;
+    }
+
+    size_t len = 0;
+    for (size_t i = 0; i < ARRAY_LEN(values); ++i) {
+        if (!(buttons & values[i].button)) {
+            continue;
+        }
+        if (len) {
+            buf[len++] = '|';
+        }
+        size_t name_len = strlen(values[i].name);
+        memcpy(&buf[len], values[i].name, name_len);
+        len += name_len;
+    }
+    buf[len] = '\0';
+
+    return buf;
 }
 
 static void
@@ -322,6 +431,233 @@ sc_control_msg_log(const struct sc_control_msg *msg) {
             LOG_CMSG("unknown type: %u", (unsigned) msg->type);
             break;
     }
+#undef LOG_CMSG
+}
+
+void
+sc_control_msg_log_human(const struct sc_control_msg *msg) {
+#define LOG_CMSG(fmt, ...) LOGI_USER_ACTION("send: " fmt, ## __VA_ARGS__)
+    switch (msg->type) {
+        case SC_CONTROL_MSG_TYPE_INJECT_KEYCODE:
+            switch (msg->inject_keycode.action) {
+                case AKEY_EVENT_ACTION_DOWN:
+                    LOG_CMSG("keyDown code=%d",
+                             (int) msg->inject_keycode.keycode);
+                    break;
+                case AKEY_EVENT_ACTION_UP:
+                    LOG_CMSG("keyUp code=%d",
+                             (int) msg->inject_keycode.keycode);
+                    break;
+                case AKEY_EVENT_ACTION_MULTIPLE:
+                    LOG_CMSG("keyMulti code=%d repeat=%" PRIu32,
+                             (int) msg->inject_keycode.keycode,
+                             msg->inject_keycode.repeat);
+                    break;
+                default:
+                    LOG_CMSG("unknownType=%u", (unsigned) msg->type);
+                    break;
+            }
+            break;
+        case SC_CONTROL_MSG_TYPE_INJECT_TEXT:
+            LOG_CMSG("text \"%s\"", msg->inject_text.text);
+            break;
+        case SC_CONTROL_MSG_TYPE_INJECT_TOUCH_EVENT: {
+            enum android_motionevent_action action =
+                msg->inject_touch_event.action & AMOTION_EVENT_ACTION_MASK;
+            const struct sc_point *point = &msg->inject_touch_event.position.point;
+            uint64_t pointer_id = msg->inject_touch_event.pointer_id;
+
+            if (is_mouse_pointer(pointer_id)) {
+                char buttons[32];
+                const char *button_name =
+                    mouse_button_name(msg->inject_touch_event.action_button);
+                switch (action) {
+                    case AMOTION_EVENT_ACTION_HOVER_MOVE:
+                        LOG_CMSG("mouseHover at (%" PRIi32 ", %" PRIi32 ")",
+                                 point->x, point->y);
+                        break;
+                    case AMOTION_EVENT_ACTION_MOVE:
+                        if (msg->inject_touch_event.buttons) {
+                            LOG_CMSG("mouseDrag at (%" PRIi32 ", %" PRIi32
+                                     ") buttons=%s",
+                                     point->x, point->y,
+                                     buttons_to_string(
+                                         msg->inject_touch_event.buttons,
+                                         buttons));
+                        } else {
+                            LOG_CMSG("mouseMove at (%" PRIi32 ", %" PRIi32 ")",
+                                     point->x, point->y);
+                        }
+                        break;
+                    case AMOTION_EVENT_ACTION_DOWN:
+                        if (button_name) {
+                            LOG_CMSG("%sClickDown at (%" PRIi32 ", %" PRIi32
+                                     ")",
+                                     button_name, point->x, point->y);
+                        } else {
+                            LOG_CMSG("mouse%s at (%" PRIi32 ", %" PRIi32
+                                     ") buttons=%s",
+                                     motionevent_action_label_human(action),
+                                     point->x, point->y,
+                                     buttons_to_string(
+                                         msg->inject_touch_event.buttons,
+                                         buttons));
+                        }
+                        break;
+                    case AMOTION_EVENT_ACTION_UP:
+                        if (button_name) {
+                            LOG_CMSG("%sClickUp at (%" PRIi32 ", %" PRIi32 ")",
+                                     button_name, point->x, point->y);
+                        } else {
+                            LOG_CMSG("mouse%s at (%" PRIi32 ", %" PRIi32
+                                     ") buttons=%s",
+                                     motionevent_action_label_human(action),
+                                     point->x, point->y,
+                                     buttons_to_string(
+                                         msg->inject_touch_event.buttons,
+                                         buttons));
+                        }
+                        break;
+                    case AMOTION_EVENT_ACTION_BUTTON_PRESS:
+                        if (button_name) {
+                            LOG_CMSG("%sButtonPress at (%" PRIi32 ", %" PRIi32
+                                     ")",
+                                     button_name, point->x, point->y);
+                        } else {
+                            LOG_CMSG("mouse%s at (%" PRIi32 ", %" PRIi32
+                                     ") buttons=%s",
+                                     motionevent_action_label_human(action),
+                                     point->x, point->y,
+                                     buttons_to_string(
+                                         msg->inject_touch_event.buttons,
+                                         buttons));
+                        }
+                        break;
+                    case AMOTION_EVENT_ACTION_BUTTON_RELEASE:
+                        if (button_name) {
+                            LOG_CMSG("%sButtonRelease at (%" PRIi32 ", %" PRIi32
+                                     ")",
+                                     button_name, point->x, point->y);
+                        } else {
+                            LOG_CMSG("mouse%s at (%" PRIi32 ", %" PRIi32
+                                     ") buttons=%s",
+                                     motionevent_action_label_human(action),
+                                     point->x, point->y,
+                                     buttons_to_string(
+                                         msg->inject_touch_event.buttons,
+                                         buttons));
+                        }
+                        break;
+                    default:
+                        LOG_CMSG("mouse%s at (%" PRIi32 ", %" PRIi32
+                                 ") buttons=%s",
+                                 motionevent_action_label_human(action),
+                                 point->x, point->y,
+                                 buttons_to_string(
+                                     msg->inject_touch_event.buttons, buttons));
+                        break;
+                }
+            } else if (is_finger_pointer(pointer_id)) {
+                const char *target = pointer_target_name(pointer_id);
+                switch (action) {
+                    case AMOTION_EVENT_ACTION_DOWN:
+                        LOG_CMSG("%sPress at (%" PRIi32 ", %" PRIi32
+                                 ") pressure=%f",
+                                 target, point->x, point->y,
+                                 msg->inject_touch_event.pressure);
+                        break;
+                    case AMOTION_EVENT_ACTION_UP:
+                        LOG_CMSG("%sRelease at (%" PRIi32 ", %" PRIi32
+                                 ") pressure=%f",
+                                 target, point->x, point->y,
+                                 msg->inject_touch_event.pressure);
+                        break;
+                    case AMOTION_EVENT_ACTION_MOVE:
+                        LOG_CMSG("%sMove at (%" PRIi32 ", %" PRIi32
+                                 ") pressure=%f",
+                                 target, point->x, point->y,
+                                 msg->inject_touch_event.pressure);
+                        break;
+                    default:
+                        LOG_CMSG("%s%s at (%" PRIi32 ", %" PRIi32
+                                 ") pressure=%f",
+                                 target, motionevent_action_label_human(action),
+                                 point->x, point->y,
+                                 msg->inject_touch_event.pressure);
+                        break;
+                }
+            } else {
+                LOG_CMSG("pointer id=%" PRIu64_ " %s at (%" PRIi32 ", %" PRIi32
+                         ") pressure=%f",
+                         pointer_id, motionevent_action_label_human(action),
+                         point->x, point->y,
+                         msg->inject_touch_event.pressure);
+            }
+            break;
+        }
+        case SC_CONTROL_MSG_TYPE_INJECT_SCROLL_EVENT: {
+            char buttons[32];
+            LOG_CMSG("scroll at (%" PRIi32 ", %" PRIi32 ") h=%f v=%f buttons=%s",
+                     msg->inject_scroll_event.position.point.x,
+                     msg->inject_scroll_event.position.point.y,
+                     msg->inject_scroll_event.hscroll,
+                     msg->inject_scroll_event.vscroll,
+                     buttons_to_string(msg->inject_scroll_event.buttons,
+                                       buttons));
+            break;
+        }
+        case SC_CONTROL_MSG_TYPE_BACK_OR_SCREEN_ON:
+            LOG_CMSG("backOrScreenOn %s",
+                     KEYEVENT_ACTION_LABEL(msg->back_or_screen_on.action));
+            break;
+        case SC_CONTROL_MSG_TYPE_GET_CLIPBOARD:
+            LOG_CMSG("clipboardGet copyKey=%s",
+                     copy_key_labels[msg->get_clipboard.copy_key]);
+            break;
+        case SC_CONTROL_MSG_TYPE_SET_CLIPBOARD:
+            LOG_CMSG("clipboardSet sequence=%" PRIu64_ " %s \"%s\"",
+                     msg->set_clipboard.sequence,
+                     msg->set_clipboard.paste ? "paste" : "nopaste",
+                     msg->set_clipboard.text);
+            break;
+        case SC_CONTROL_MSG_TYPE_SET_DISPLAY_POWER:
+            LOG_CMSG("displayPower %s",
+                     msg->set_display_power.on ? "on" : "off");
+            break;
+        case SC_CONTROL_MSG_TYPE_EXPAND_NOTIFICATION_PANEL:
+            LOG_CMSG("expandNotificationPanel");
+            break;
+        case SC_CONTROL_MSG_TYPE_EXPAND_SETTINGS_PANEL:
+            LOG_CMSG("expandSettingsPanel");
+            break;
+        case SC_CONTROL_MSG_TYPE_COLLAPSE_PANELS:
+            LOG_CMSG("collapsePanels");
+            break;
+        case SC_CONTROL_MSG_TYPE_ROTATE_DEVICE:
+            LOG_CMSG("rotateDevice");
+            break;
+        case SC_CONTROL_MSG_TYPE_UHID_CREATE:
+            LOG_CMSG("uhidCreate id=%u name=\"%s\" reportDescSize=%u",
+                     (unsigned) msg->uhid_create.id,
+                     msg->uhid_create.name ? msg->uhid_create.name : "",
+                     (unsigned) msg->uhid_create.report_desc_size);
+            break;
+        case SC_CONTROL_MSG_TYPE_UHID_INPUT:
+            LOG_CMSG("uhidInput id=%u size=%u",
+                     (unsigned) msg->uhid_input.id,
+                     (unsigned) msg->uhid_input.size);
+            break;
+        case SC_CONTROL_MSG_TYPE_UHID_DESTROY:
+            LOG_CMSG("uhidDestroy id=%u", (unsigned) msg->uhid_destroy.id);
+            break;
+        case SC_CONTROL_MSG_TYPE_OPEN_HARD_KEYBOARD_SETTINGS:
+            LOG_CMSG("openHardKeyboardSettings");
+            break;
+        default:
+            LOG_CMSG("unknownType=%u", (unsigned) msg->type);
+            break;
+    }
+#undef LOG_CMSG
 }
 
 bool

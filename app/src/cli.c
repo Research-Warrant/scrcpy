@@ -111,6 +111,7 @@ enum {
     OPT_SCREEN_OFF_TIMEOUT,
     OPT_CAPTURE_ORIENTATION,
     OPT_ANGLE,
+    OPT_LOG_INFO_USER_ACTION,
     OPT_NO_VD_SYSTEM_DECORATIONS,
     OPT_NO_VD_DESTROY_CONTENT,
     OPT_DISPLAY_IME_POLICY,
@@ -941,6 +942,12 @@ static const struct sc_option options[] = {
                 "establishing the tunnel will be used.",
     },
     {
+        .longopt_id = OPT_LOG_INFO_USER_ACTION,
+        .longopt = "log-info-user-action",
+        .text = "Enable human-readable INFO-USER-ACTION logs for outgoing "
+                "control messages.",
+    },
+    {
         .shortopt = 'v',
         .longopt = "version",
         .text = "Print the version of scrcpy.",
@@ -1222,6 +1229,11 @@ static const struct sc_envvar envvars[] = {
     {
         .name = "SCRCPY_ICON_PATH",
         .text = "Path to the program icon",
+    },
+    {
+        .name = "SCRCPY_LOG_INFO_USER_ACTION",
+        .text = "Enable INFO-USER-ACTION logs for outgoing control messages "
+                "(accepted values: 1, true, yes, on)",
     },
     {
         .name = "SCRCPY_SERVER_PATH",
@@ -2510,6 +2522,9 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
                 if (!parse_log_level(optarg, &opts->log_level)) {
                     return false;
                 }
+                break;
+            case OPT_LOG_INFO_USER_ACTION:
+                opts->log_info_user_action = true;
                 break;
             case 'w':
                 opts->stay_awake = true;

@@ -1,16 +1,48 @@
 name: Build
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       name:
         description: 'Version name (default is ref name)'
 
-env:
-  # $VERSION is used by release scripts
-  VERSION: ${{ github.event.inputs.name || github.ref_name }}
+permissions:
+  contents: write
 
 jobs:
+  prepare-release-metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Compute release metadata
+        id: metadata
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/master" ]]; then
+            base_version=$(sed -n "s/^[[:space:]]*version: '\([^']*\)'/\1/p" meson.build | head -n1)
+            if [[ -z "$base_version" ]]; then
+              echo "Could not determine version from meson.build" >&2
+              exit 1
+            fi
+
+            version="${base_version}-rw"
+            tag="v${version}"
+          else
+            version="${{ github.event.inputs.name || github.ref_name }}"
+            tag="$version"
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
   test-scrcpy-server:
     runs-on: ubuntu-latest
     env:
@@ -273,9 +305,12 @@ jobs:
 
   package-linux-x86_64:
     needs:
+      - prepare-release-metadata
       - build-scrcpy-server
       - build-linux-x86_64
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -309,9 +344,12 @@ jobs:
 
   package-win32:
     needs:
+      - prepare-release-metadata
       - build-scrcpy-server
       - build-win32
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -345,9 +383,12 @@ jobs:
 
   package-win64:
     needs:
+      - prepare-release-metadata
       - build-scrcpy-server
       - build-win64
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -381,9 +422,12 @@ jobs:
 
   package-macos-aarch64:
     needs:
+      - prepare-release-metadata
       - build-scrcpy-server
       - build-macos-aarch64
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -417,9 +461,12 @@ jobs:
 
   package-macos-x86_64:
     needs:
+      - prepare-release-metadata
       - build-scrcpy-server
       - build-macos-x86_64
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -453,6 +500,7 @@ jobs:
 
   release:
     needs:
+      - prepare-release-metadata
       - build-scrcpy-server
       - package-linux-x86_64
       - package-win32
@@ -460,6 +508,9 @@ jobs:
       - package-macos-aarch64
       - package-macos-x86_64
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
+      RELEASE_TAG: ${{ needs.prepare-release-metadata.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -511,3 +562,29 @@ jobs:
         with:
           name: scrcpy-release-${{ env.VERSION }}
           path: release/output
+
+      - name: Create git tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists on origin" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${RELEASE_TAG}"
+          git push origin "${RELEASE_TAG}"
+
+      - name: Create GitHub release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release create "${RELEASE_TAG}" release/output/* \
+            --title "${RELEASE_TAG}" \
+            --generate-notes

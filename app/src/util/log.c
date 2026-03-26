@@ -52,6 +52,7 @@ sc_set_log_level(enum sc_log_level level) {
     SDL_LogPriority sdl_log = log_level_sc_to_sdl(level);
     SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, sdl_log);
     SDL_LogSetPriority(SDL_LOG_CATEGORY_CUSTOM, sdl_log);
+    SDL_LogSetPriority(SC_LOG_CATEGORY_USER_ACTION, sdl_log);
 }
 
 enum sc_log_level
@@ -141,11 +142,13 @@ static void SDLCALL
 sc_sdl_log_print(void *userdata, int category, SDL_LogPriority priority,
                  const char *message) {
     (void) userdata;
-    (void) category;
 
     FILE *out = priority < SDL_LOG_PRIORITY_WARN ? stdout : stderr;
     assert(priority < SDL_NUM_LOG_PRIORITIES);
-    const char *prio_name = sc_sdl_log_priority_names[priority];
+    const char *prio_name = category == SC_LOG_CATEGORY_USER_ACTION
+                         && priority == SDL_LOG_PRIORITY_INFO
+                      ? "INFO-USER-ACTION"
+                      : sc_sdl_log_priority_names[priority];
     fprintf(out, "%s: %s\n", prio_name, message);
 }
 

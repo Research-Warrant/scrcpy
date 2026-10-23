@@ -2,6 +2,8 @@
 #
 # This script generates the scrcpy binary "manually" (without gradle).
 #
+# Modified by Research Warrant: also compiles the aoa package (USB accessory transport).
+#
 # Adapt Android platform and build tools versions (via ANDROID_PLATFORM and
 # ANDROID_BUILD_TOOLS environment variables).
 #
@@ -59,6 +61,7 @@ FAKE_SRC=( \
 
 SRC=( \
     com/genymobile/scrcpy/*.java \
+    com/genymobile/scrcpy/aoa/*.java \
     com/genymobile/scrcpy/audio/*.java \
     com/genymobile/scrcpy/control/*.java \
     com/genymobile/scrcpy/device/*.java \

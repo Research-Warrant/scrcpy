@@ -1,8 +1,12 @@
+// Modified by Research Warrant: can also be created from streams (USB accessory transport, see aoa/AccessoryLink).
+
 package com.genymobile.scrcpy.control;
 
 import android.net.LocalSocket;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 public final class ControlChannel {
 
@@ -10,8 +14,12 @@ public final class ControlChannel {
     private final DeviceMessageWriter writer;
 
     public ControlChannel(LocalSocket controlSocket) throws IOException {
-        reader = new ControlMessageReader(controlSocket.getInputStream());
-        writer = new DeviceMessageWriter(controlSocket.getOutputStream());
+        this(controlSocket.getInputStream(), controlSocket.getOutputStream());
+    }
+
+    public ControlChannel(InputStream inputStream, OutputStream outputStream) {
+        reader = new ControlMessageReader(inputStream);
+        writer = new DeviceMessageWriter(outputStream);
     }
 
     public ControlMessage recv() throws IOException {

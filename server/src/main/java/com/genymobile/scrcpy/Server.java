@@ -1,5 +1,8 @@
+// Modified by Research Warrant: the "aoa" option connects over the USB accessory (see aoa/AccessoryLink), with its own exit codes.
+
 package com.genymobile.scrcpy;
 
+import com.genymobile.scrcpy.aoa.AoaException;
 import com.genymobile.scrcpy.audio.AudioCapture;
 import com.genymobile.scrcpy.audio.AudioCodec;
 import com.genymobile.scrcpy.audio.AudioDirectCapture;
@@ -102,7 +105,12 @@ public final class Server {
 
         List<AsyncProcessor> asyncProcessors = new ArrayList<>();
 
-        DesktopConnection connection = DesktopConnection.open(scid, tunnelForward, video, audio, control, sendDummyByte);
+        DesktopConnection connection;
+        if (options.isAoa()) {
+            connection = DesktopConnection.openAccessory(scid, options.getAoaNonce(), control, sendDummyByte);
+        } else {
+            connection = DesktopConnection.open(scid, tunnelForward, video, audio, control, sendDummyByte);
+        }
         try {
             if (options.getSendDeviceMeta()) {
                 connection.sendDeviceMeta(Device.getDeviceName());
@@ -213,6 +221,10 @@ public final class Server {
         int status = 0;
         try {
             internalMain(args);
+        } catch (AoaException e) {
+            // The exit code tells the host why the USB accessory transport failed; the message is one log line
+            Ln.e(e.getMessage());
+            status = e.getExitCode();
         } catch (Throwable t) {
             Ln.e(t.getMessage(), t);
             status = 1;

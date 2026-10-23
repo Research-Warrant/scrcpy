@@ -306,6 +306,13 @@ if get_option('buildtype') == 'debug'
             'src/util/str.c',
             'src/util/strbuf.c',
         ]],
+        ['test_control_msg_log_human', [
+            'tests/test_control_msg_log_human.c',
+            'src/control_msg.c',
+            'src/util/log.c',
+            'src/util/str.c',
+            'src/util/strbuf.c',
+        ]],
         ['test_device_msg_deserialize', [
             'tests/test_device_msg_deserialize.c',
             'src/device_msg.c',

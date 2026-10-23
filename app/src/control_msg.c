@@ -485,7 +485,9 @@ sc_control_msg_log_human(const struct sc_control_msg *msg) {
                              msg->inject_keycode.repeat);
                     break;
                 default:
-                    LOG_CMSG("unknownType=%u", (unsigned) msg->type);
+                    LOG_CMSG("key action=%d code=%d",
+                             (int) msg->inject_keycode.action,
+                             (int) msg->inject_keycode.keycode);
                     break;
             }
             break;
@@ -683,6 +685,31 @@ sc_control_msg_log_human(const struct sc_control_msg *msg) {
             break;
         case SC_CONTROL_MSG_TYPE_OPEN_HARD_KEYBOARD_SETTINGS:
             LOG_CMSG("openHardKeyboardSettings");
+            break;
+        case SC_CONTROL_MSG_TYPE_START_APP:
+            LOG_CMSG("startApp name=\"%s\"",
+                     msg->start_app.name ? msg->start_app.name : "");
+            break;
+        case SC_CONTROL_MSG_TYPE_RESET_VIDEO:
+            LOG_CMSG("resetVideo");
+            break;
+        case SC_CONTROL_MSG_TYPE_CAMERA_SET_TORCH:
+            LOG_CMSG("cameraTorch %s",
+                     msg->camera_set_torch.on ? "on" : "off");
+            break;
+        case SC_CONTROL_MSG_TYPE_CAMERA_ZOOM_IN:
+            LOG_CMSG("cameraZoomIn");
+            break;
+        case SC_CONTROL_MSG_TYPE_CAMERA_ZOOM_OUT:
+            LOG_CMSG("cameraZoomOut");
+            break;
+        case SC_CONTROL_MSG_TYPE_RESIZE_DISPLAY:
+            LOG_CMSG("resizeDisplay %" PRIu16 "x%" PRIu16,
+                     msg->resize_display.width, msg->resize_display.height);
+            break;
+        case SC_CONTROL_MSG_TYPE_SCAN_FILE:
+            LOG_CMSG("scanFile path=\"%s\"",
+                     msg->scan_file.path ? msg->scan_file.path : "");
             break;
         default:
             LOG_CMSG("unknownType=%u", (unsigned) msg->type);

@@ -10,6 +10,11 @@
 #include <libavutil/log.h>
 
 static bool sc_user_action_logs_enabled;
+// Last level applied by sc_set_log_level(), so that toggling the user action
+// category never reads the priority back from SDL (which may be unset, or a
+// priority with no scrcpy equivalent such as SDL_LOG_PRIORITY_TRACE)
+static bool sc_log_level_applied;
+static enum sc_log_level sc_log_level_current;
 
 static SDL_LogPriority
 log_level_sc_to_sdl(enum sc_log_level level) {
@@ -57,12 +62,18 @@ sc_set_log_level(enum sc_log_level level) {
     SDL_SetLogPriority(SC_LOG_CATEGORY_USER_ACTION,
                        sc_user_action_logs_enabled ? sdl_log
                                                    : SDL_LOG_PRIORITY_WARN);
+    sc_log_level_current = level;
+    sc_log_level_applied = true;
 }
 
 void
 sc_set_log_user_action_enabled(bool enabled) {
     sc_user_action_logs_enabled = enabled;
-    sc_set_log_level(sc_get_log_level());
+    if (sc_log_level_applied) {
+        // Re-apply the user action category priority for the current level;
+        // otherwise the next sc_set_log_level() call applies it
+        sc_set_log_level(sc_log_level_current);
+    }
 }
 
 enum sc_log_level

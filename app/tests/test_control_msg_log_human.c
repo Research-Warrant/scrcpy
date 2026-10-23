@@ -59,6 +59,26 @@ static void test_follows_log_level(void) {
     assert(message_count == count);
 }
 
+static void test_toggle_after_log_level(void) {
+    sc_set_log_user_action_enabled(false);
+    sc_set_log_level(SC_LOG_LEVEL_INFO);
+
+    struct sc_control_msg msg = {
+        .type = SC_CONTROL_MSG_TYPE_ROTATE_DEVICE,
+    };
+    unsigned count = message_count;
+    sc_control_msg_log_human(&msg);
+    assert(message_count == count);
+
+    sc_set_log_user_action_enabled(true);
+    assert_logged(&msg, "send: rotateDevice");
+
+    sc_set_log_user_action_enabled(false);
+    count = message_count;
+    sc_control_msg_log_human(&msg);
+    assert(message_count == count);
+}
+
 static void test_every_message_type(void) {
     sc_set_log_user_action_enabled(true);
     sc_set_log_level(SC_LOG_LEVEL_INFO);
@@ -232,6 +252,7 @@ int main(int argc, char *argv[]) {
 
     test_disabled_by_default();
     test_follows_log_level();
+    test_toggle_after_log_level();
     test_every_message_type();
     return 0;
 }

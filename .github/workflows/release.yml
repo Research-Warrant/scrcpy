@@ -44,8 +44,13 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   test-scrcpy-server:
+    # Every job that runs a release/ script gets VERSION: release/build_common falls back to
+    # `git describe` without it, and the windows-11-arm MSYS2 environment has no git (upstream
+    # sets VERSION workflow-wide, which cannot read this job's output)
+    needs: prepare-release-metadata
     runs-on: ubuntu-latest
     env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
       GRADLE: gradle  # use native gradle instead of ./gradlew in scripts
     steps:
       - name: Checkout code
@@ -61,8 +66,10 @@ jobs:
         run: release/test_server.sh
 
   build-scrcpy-server:
+    needs: prepare-release-metadata
     runs-on: ubuntu-latest
     env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
       GRADLE: gradle  # use native gradle instead of ./gradlew in scripts
     steps:
       - name: Checkout code
@@ -99,6 +106,9 @@ jobs:
         run: server/build_without_gradle.sh
 
   test-client:
+    needs: prepare-release-metadata
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -130,6 +140,9 @@ jobs:
           release/test_client.sh
 
   build-linux-x86_64:
+    needs: prepare-release-metadata
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     runs-on: ubuntu-22.04
     steps:
       - name: Check architecture
@@ -176,6 +189,9 @@ jobs:
           path: release/work/build-linux-x86_64/dist-tar/
 
   build-win32:
+    needs: prepare-release-metadata
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -205,6 +221,9 @@ jobs:
           path: release/work/build-win32/dist-tar/
 
   build-win64:
+    needs: prepare-release-metadata
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -234,6 +253,9 @@ jobs:
           path: release/work/build-win64/dist-tar/
 
   build-winarm64:
+    needs: prepare-release-metadata
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     runs-on: windows-11-arm
     defaults:
       run:
@@ -309,6 +331,9 @@ jobs:
           path: release/work/build-winarm64/dist-tar/
 
   build-macos-aarch64:
+    needs: prepare-release-metadata
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     runs-on: macos-latest
     steps:
       - name: Check architecture
@@ -352,6 +377,9 @@ jobs:
           path: release/work/build-macos-aarch64/dist-tar/
 
   build-macos-x86_64:
+    needs: prepare-release-metadata
+    env:
+      VERSION: ${{ needs.prepare-release-metadata.outputs.version }}
     runs-on: macos-15-intel
     steps:
       - name: Check architecture

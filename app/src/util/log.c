@@ -10,6 +10,11 @@
 #include <libavutil/log.h>
 
 static bool sc_user_action_logs_enabled;
+// Last level applied by sc_set_log_level(), so that toggling the user action
+// category never reads the priority back from SDL (which may be unset, or a
+// priority with no scrcpy equivalent such as SDL_LOG_PRIORITY_TRACE)
+static bool sc_log_level_applied;
+static enum sc_log_level sc_log_level_current;
 
 static SDL_LogPriority
 log_level_sc_to_sdl(enum sc_log_level level) {
@@ -52,22 +57,28 @@ log_level_sdl_to_sc(SDL_LogPriority priority) {
 void
 sc_set_log_level(enum sc_log_level level) {
     SDL_LogPriority sdl_log = log_level_sc_to_sdl(level);
-    SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, sdl_log);
-    SDL_LogSetPriority(SDL_LOG_CATEGORY_CUSTOM, sdl_log);
-    SDL_LogSetPriority(SC_LOG_CATEGORY_USER_ACTION,
+    SDL_SetLogPriority(SDL_LOG_CATEGORY_APPLICATION, sdl_log);
+    SDL_SetLogPriority(SDL_LOG_CATEGORY_CUSTOM, sdl_log);
+    SDL_SetLogPriority(SC_LOG_CATEGORY_USER_ACTION,
                        sc_user_action_logs_enabled ? sdl_log
                                                    : SDL_LOG_PRIORITY_WARN);
+    sc_log_level_current = level;
+    sc_log_level_applied = true;
 }
 
 void
 sc_set_log_user_action_enabled(bool enabled) {
     sc_user_action_logs_enabled = enabled;
-    sc_set_log_level(sc_get_log_level());
+    if (sc_log_level_applied) {
+        // Re-apply the user action category priority for the current level;
+        // otherwise the next sc_set_log_level() call applies it
+        sc_set_log_level(sc_log_level_current);
+    }
 }
 
 enum sc_log_level
 sc_get_log_level(void) {
-    SDL_LogPriority sdl_log = SDL_LogGetPriority(SDL_LOG_CATEGORY_APPLICATION);
+    SDL_LogPriority sdl_log = SDL_GetLogPriority(SDL_LOG_CATEGORY_APPLICATION);
     return log_level_sdl_to_sc(sdl_log);
 }
 
@@ -139,7 +150,7 @@ sc_av_log_callback(void *avcl, int level, const char *fmt, va_list vl) {
     free(local_fmt);
 }
 
-static const char *const sc_sdl_log_priority_names[SDL_NUM_LOG_PRIORITIES] = {
+static const char *const sc_sdl_log_priority_names[SDL_LOG_PRIORITY_COUNT] = {
     [SDL_LOG_PRIORITY_VERBOSE] = "VERBOSE",
     [SDL_LOG_PRIORITY_DEBUG] = "DEBUG",
     [SDL_LOG_PRIORITY_INFO] = "INFO",
@@ -154,7 +165,7 @@ sc_sdl_log_print(void *userdata, int category, SDL_LogPriority priority,
     (void) userdata;
 
     FILE *out = priority < SDL_LOG_PRIORITY_WARN ? stdout : stderr;
-    assert(priority < SDL_NUM_LOG_PRIORITIES);
+    assert(priority < SDL_LOG_PRIORITY_COUNT);
     const char *prio_name = category == SC_LOG_CATEGORY_USER_ACTION
                          && priority == SDL_LOG_PRIORITY_INFO
                       ? "INFO-USER-ACTION"
@@ -164,7 +175,11 @@ sc_sdl_log_print(void *userdata, int category, SDL_LogPriority priority,
 
 void
 sc_log_configure(void) {
-    SDL_LogSetOutputFunction(sc_sdl_log_print, NULL);
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
+    SDL_SetLogOutputFunction(sc_sdl_log_print, NULL);
     // Redirect FFmpeg logs to SDL logs
     av_log_set_callback(sc_av_log_callback);
 }

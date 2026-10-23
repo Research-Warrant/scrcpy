@@ -69,6 +69,19 @@ public final class AccessoryOpener {
         Method getCurrentAccessory = findMethod(usb, "getCurrentAccessory");
         Method openAccessory = findMethod(usb, "openAccessory");
 
+        // Workarounds mark scrcpy's ActivityThread as a system thread. UsbAccessory's constructor then
+        // requires its IUsbSerialReader to be a local Stub, which is only true inside system_server, so
+        // unmarshalling the accessory from the Binder reply throws IllegalArgumentException. Clear the
+        // flag while the accessory is read and opened.
+        boolean wasSystem = setSystemThread(false);
+        try {
+            return openAs(usb, getCurrentAccessory, openAccessory, scid);
+        } finally {
+            setSystemThread(wasSystem);
+        }
+    }
+
+    private static Opened openAs(Object usb, Method getCurrentAccessory, Method openAccessory, int scid) {
         UsbAccessory accessory = waitForAccessory(usb, getCurrentAccessory);
 
         String expectedSerial = AoaProtocol.expectedSerial(scid);
@@ -88,6 +101,28 @@ public final class AccessoryOpener {
         Ln.i("aoa: accessory open (sdk " + Build.VERSION.SDK_INT + ", " + signature(getCurrentAccessory) + ", " + signature(openAccessory)
                 + ")");
         return new Opened(fd, serial);
+    }
+
+    /**
+     * Set ActivityThread.currentActivityThread().mSystemThread and return its previous value (false if there is no
+     * ActivityThread or the field cannot be accessed).
+     */
+    private static boolean setSystemThread(boolean value) {
+        try {
+            Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
+            Object activityThread = activityThreadClass.getMethod("currentActivityThread").invoke(null);
+            if (activityThread == null) {
+                return false;
+            }
+            Field field = activityThreadClass.getDeclaredField("mSystemThread");
+            field.setAccessible(true);
+            boolean previous = field.getBoolean(activityThread);
+            field.setBoolean(activityThread, value);
+            return previous;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            Ln.w("aoa: could not change ActivityThread.mSystemThread: " + e);
+            return false;
+        }
     }
 
     private static Object getUsbManager() {
@@ -161,6 +196,8 @@ public final class AccessoryOpener {
             return method.invoke(usb, args);
         } catch (InvocationTargetException | IllegalAccessException | RuntimeException e) {
             Throwable cause = unwrap(e);
+            // The exception may have no message: log its stack so the host log shows where it came from
+            Ln.e("aoa: " + method.getName() + " failed", cause);
             if (cause instanceof SecurityException) {
                 throw new AoaException(AoaException.PERMISSION_DENIED, method.getName() + ": " + cause, cause);
             }

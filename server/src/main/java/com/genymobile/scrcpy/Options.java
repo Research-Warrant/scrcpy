@@ -1,5 +1,9 @@
+// Modified by Research Warrant: adds the "aoa" option (USB accessory transport, see aoa/AccessoryLink).
+
 package com.genymobile.scrcpy;
 
+import com.genymobile.scrcpy.aoa.AoaException;
+import com.genymobile.scrcpy.aoa.AoaProtocol;
 import com.genymobile.scrcpy.audio.AudioCodec;
 import com.genymobile.scrcpy.audio.AudioSource;
 import com.genymobile.scrcpy.device.Device;
@@ -38,6 +42,8 @@ public class Options {
     private float maxFps;
     private float angle;
     private boolean tunnelForward;
+    private boolean aoa;
+    private int aoaNonce;
     private Rect crop;
     private boolean control = true;
     private int displayId;
@@ -149,6 +155,14 @@ public class Options {
 
     public boolean isTunnelForward() {
         return tunnelForward;
+    }
+
+    public boolean isAoa() {
+        return aoa;
+    }
+
+    public int getAoaNonce() {
+        return aoaNonce;
     }
 
     public Rect getCrop() {
@@ -414,6 +428,10 @@ public class Options {
                 case "tunnel_forward":
                     options.tunnelForward = Boolean.parseBoolean(value);
                     break;
+                case "aoa":
+                    options.aoaNonce = AoaProtocol.parseNonce(value);
+                    options.aoa = true;
+                    break;
                 case "crop":
                     if (!value.isEmpty()) {
                         options.crop = parseCrop(value);
@@ -579,7 +597,27 @@ public class Options {
             options.displayId = Device.DISPLAY_ID_NONE;
         }
 
+        if (options.aoa) {
+            validateAoa(options);
+        }
+
         return options;
+    }
+
+    private static void validateAoa(Options options) {
+        // The accessory carries one video stream and, optionally, the control stream
+        if (options.scid == -1) {
+            throw new AoaException(AoaException.BAD_OPTION, "aoa requires scid");
+        }
+        if (options.tunnelForward) {
+            throw new AoaException(AoaException.BAD_OPTION, "aoa excludes tunnel_forward=true");
+        }
+        if (!options.video) {
+            throw new AoaException(AoaException.BAD_OPTION, "aoa requires video=true");
+        }
+        if (options.audio) {
+            throw new AoaException(AoaException.BAD_OPTION, "aoa requires audio=false");
+        }
     }
 
     private static Rect parseCrop(String crop) {

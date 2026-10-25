@@ -1,0 +1,60 @@
+# Research Warrant: release the dex-only scrcpy-server that Orka embeds (doc/orka/server-release.md).
+name: Orka server release
+
+on:
+  push:
+    tags:
+      - 'v*-orka.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and release (v<version>-orka.<n>)'
+        required: true
+      expect_sha256:
+        description: 'SHA-256 of a local build to compare against (optional)'
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: orka-server-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      EXPECT_SHA256: ${{ inputs.expect_sha256 }}
+      ANDROID_PLATFORM: '36'
+      ANDROID_BUILD_TOOLS: '36.0.0'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}  # the tooling; the script extracts the tag's tree itself
+          fetch-depth: 0          # brings the tags, so the script can read the annotated tag
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17.0.20'
+      - name: Install the pinned SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "platforms;android-${ANDROID_PLATFORM}" "build-tools;${ANDROID_BUILD_TOOLS}"
+      - name: Refuse to overwrite a published release
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; cut a new orka.N instead" >&2; exit 1
+          fi
+      - name: Build, check and package
+        run: release/build_orka_server.sh
+      - name: Job summary
+        run: cat release/output-orka/provenance.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish
+        run: |
+          gh release create "$TAG" \
+            "release/output-orka/scrcpy-server-$TAG" release/output-orka/SHA256SUMS.txt \
+            --verify-tag --latest=false --title "$TAG" \
+            --notes-file release/output-orka/provenance.md

@@ -20,7 +20,7 @@ import java.lang.reflect.Method;
  * is called through reflection. The method signatures differ across Android releases: among the public overloads whose parameters
  * can all be filled ({@code UsbAccessory}, the shell package name, user 0), the one with the fewest parameters is called.
  */
-@SuppressLint("PrivateApi,DiscouragedPrivateApi,BlockedPrivateApi")
+@SuppressLint("PrivateApi,DiscouragedPrivateApi,BlockedPrivateApi,SoonBlockedPrivateApi")
 public final class AccessoryOpener {
 
     public static final int MIN_SDK = 33; // Android 13: Android 12 refuses openAccessory to the shell uid

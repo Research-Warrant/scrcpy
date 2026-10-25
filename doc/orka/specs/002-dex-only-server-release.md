@@ -222,12 +222,12 @@ jobs:
       EXPECT_SHA256: ${{ inputs.expect_sha256 }}
       ANDROID_PLATFORM: '36'
       ANDROID_BUILD_TOOLS: '36.0.0'
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}  # the tooling; the script extracts the tag's tree itself
           fetch-depth: 0          # brings the tags, so the script can read the annotated tag
+          persist-credentials: false
       - uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
@@ -237,6 +237,8 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
             "platforms;android-${ANDROID_PLATFORM}" "build-tools;${ANDROID_BUILD_TOOLS}"
       - name: Refuse to overwrite a published release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; cut a new orka.N instead" >&2; exit 1
@@ -246,6 +248,8 @@ jobs:
       - name: Job summary
         run: cat release/output-orka/provenance.md >> "$GITHUB_STEP_SUMMARY"
       - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$TAG" \
             "release/output-orka/scrcpy-server-$TAG" release/output-orka/SHA256SUMS.txt \
@@ -266,6 +270,9 @@ jobs:
   injection through `workflow_dispatch` inputs.
 - `--verify-tag` makes `gh` fail rather than create a tag. Tags are always created by a person
   (decision 5).
+- The write token reaches only the two `gh` steps (`GH_TOKEN` in their own `env`), and the checkout
+  keeps no credentials (`persist-credentials: false`). The build step runs the tag tree's own
+  `build_without_gradle.sh`, and it never sees a token that can write to the repository.
 
 ### Work item 3. `doc/orka/server-release.md` (new, next to Spec 001's contract copy)
 

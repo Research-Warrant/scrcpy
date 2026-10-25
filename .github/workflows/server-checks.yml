@@ -33,7 +33,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '17.0.20'
 
       - name: Install the pinned SDK packages
         run: |
@@ -55,7 +55,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '17.0.20'
 
       - name: Install the pinned SDK packages
         run: |

@@ -1,0 +1,11 @@
+base: v5.0.1 a60891aea193d92e7e5c3942700eca63f9d19a5f
+M	server/build_without_gradle.sh
+M	server/src/main/java/com/genymobile/scrcpy/Options.java
+M	server/src/main/java/com/genymobile/scrcpy/Server.java
+A	server/src/main/java/com/genymobile/scrcpy/aoa/AccessoryLink.java
+A	server/src/main/java/com/genymobile/scrcpy/aoa/AccessoryOpener.java
+A	server/src/main/java/com/genymobile/scrcpy/aoa/AoaException.java
+A	server/src/main/java/com/genymobile/scrcpy/aoa/AoaProtocol.java
+A	server/src/main/java/com/genymobile/scrcpy/aoa/MessageParser.java
+M	server/src/main/java/com/genymobile/scrcpy/control/ControlChannel.java
+M	server/src/main/java/com/genymobile/scrcpy/device/DesktopConnection.java

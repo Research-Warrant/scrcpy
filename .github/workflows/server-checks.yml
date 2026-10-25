@@ -87,6 +87,7 @@ jobs:
 
       - name: Report size and SHA-256
         env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           head_sha256=$(sha256sum out/scrcpy-server | cut -d' ' -f1)
@@ -96,7 +97,7 @@ jobs:
             echo
             echo "| Build | Commit | Size (bytes) | SHA-256 |"
             echo "|---|---|---|---|"
-            echo "| head | \`$GITHUB_SHA\` | $head_size | \`$head_sha256\` |"
+            echo "| head | \`$HEAD_SHA\` | $head_size | \`$head_sha256\` |"
           } >> "$GITHUB_STEP_SUMMARY"
           if [[ -f out-base/scrcpy-server ]]; then
             base_sha256=$(sha256sum out-base/scrcpy-server | cut -d' ' -f1)

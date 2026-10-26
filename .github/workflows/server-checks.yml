@@ -118,3 +118,14 @@ jobs:
           name: scrcpy-server-dex
           path: out/scrcpy-server
           retention-days: 14
+
+  upstream-delta:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # the guard diffs against upstream v5.0.1's commit
+
+      - name: Check the server's delta against upstream
+        run: .github/orka/check-upstream-delta.sh

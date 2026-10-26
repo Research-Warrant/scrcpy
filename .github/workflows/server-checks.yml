@@ -1,0 +1,131 @@
+# Research Warrant: server checks on every pull request (doc/orka/specs/001-pull-request-ci-and-aoa-contract-tests.md).
+# Server only: the client builds stay in release.yml.
+name: Server checks
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - master
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-test:
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: pr-${{ github.event.number || github.sha }}
+      GRADLE: gradle  # use native gradle instead of ./gradlew in scripts
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17.0.20'
+
+      - name: Install the pinned SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Checkstyle, unit tests and lint
+        run: release/test_server.sh
+
+  server-dex:
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_PLATFORM: '36'
+      ANDROID_BUILD_TOOLS: '36.0.0'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17.0.20'
+
+      - name: Install the pinned SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build the dex-only server
+        env:
+          BUILD_DIR: out
+        run: |
+          server/build_without_gradle.sh
+          sha256sum out/scrcpy-server
+          stat -c %s out/scrcpy-server
+
+      - name: Checkout the pull request base
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - name: Build the dex-only server of the base
+        if: github.event_name == 'pull_request'
+        env:
+          BUILD_DIR: out-base
+        run: |
+          base/server/build_without_gradle.sh
+          sha256sum out-base/scrcpy-server
+          stat -c %s out-base/scrcpy-server
+
+      - name: Report size and SHA-256
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          head_sha256=$(sha256sum out/scrcpy-server | cut -d' ' -f1)
+          head_size=$(stat -c %s out/scrcpy-server)
+          {
+            echo "### Dex-only scrcpy-server"
+            echo
+            echo "| Build | Commit | Size (bytes) | SHA-256 |"
+            echo "|---|---|---|---|"
+            echo "| head | \`$HEAD_SHA\` | $head_size | \`$head_sha256\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f out-base/scrcpy-server ]]; then
+            base_sha256=$(sha256sum out-base/scrcpy-server | cut -d' ' -f1)
+            base_size=$(stat -c %s out-base/scrcpy-server)
+            echo "| base | \`$BASE_SHA\` | $base_size | \`$base_sha256\` |" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$head_sha256" == "$base_sha256" ]]; then
+              verdict="Head and base SHA-256 are equal: the change leaves the dex unchanged."
+            else
+              verdict="Head and base SHA-256 differ: the change alters the dex."
+            fi
+            { echo; echo "$verdict"; } >> "$GITHUB_STEP_SUMMARY"
+            echo "$verdict"
+          fi
+
+      - name: Upload the dex-only server
+        uses: actions/upload-artifact@v7
+        with:
+          name: scrcpy-server-dex
+          path: out/scrcpy-server
+          retention-days: 14
+
+  upstream-delta:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # the guard diffs against upstream v5.0.1's commit
+
+      - name: Check the server's delta against upstream
+        run: .github/orka/check-upstream-delta.sh

@@ -660,6 +660,7 @@ jobs:
     needs:
       - prepare-release-metadata
       - build-scrcpy-server
+      - test-scrcpy-server
       - package-linux-x86_64
       - package-win32
       - package-win64
